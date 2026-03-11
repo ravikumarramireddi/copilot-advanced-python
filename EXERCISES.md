@@ -8,6 +8,22 @@ These exercises focus on building an agentic development workflow using custom a
 
 **Prerequisites:** VS Code with GitHub Copilot, agent mode available, enterprise subscription.
 
+**Two principles to carry through every exercise:**
+
+1. **Human-in-the-loop.** Design your agents so they stop and report back at key decision points. The human reviews, comments, and approves before the agent continues. An orchestrator that runs end-to-end without checkpoints is a liability, not an asset.
+2. **Brevity.** Agent definitions, skill instructions, and protocols that grow beyond ~150 lines start to lose focus. The LLM cannot reliably follow a wall of text. Keep instructions tight, specific, and structured.
+
+**Design checklist** -- review this before you consider any exercise done:
+
+- [ ] Does the agent stop for human approval at key decision points?
+- [ ] Could any LLM guesswork be replaced with a deterministic tool (script, skill, hook) to get facts into context?
+- [ ] Are the instructions under ~150 lines and clearly structured?
+- [ ] Is the tool list minimal -- only what this agent actually needs?
+- [ ] Does each subagent have a defined input/output contract?
+- [ ] Have you tested the agent with a concrete task and observed its behavior?
+
+**Getting help:** This repo includes an **Exercise Tutor** agent. Switch to it in the agent picker whenever you need guidance on concepts, design decisions, or debugging. Open separate chat threads for different topics to keep conversations focused -- don't pile everything into one thread.
+
 ---
 
 ## Exercise 0: Setup Verification
@@ -40,7 +56,7 @@ mkdir -p .github/agents .github/skills .github/hooks
 A custom agent is a Markdown file with YAML frontmatter that defines the agent's name, description, available [tools](https://code.visualstudio.com/docs/copilot/agents/agent-tools), and behavioral instructions. Key frontmatter properties: `description`, `tools`, `model`, `agents`, `handoffs`. See the [file structure reference](https://code.visualstudio.com/docs/copilot/customization/custom-agents#_custom-agent-file-structure).
 
 **Key decisions to make:**
-- Which tools should the PM have access to? Consider that it should analyze, not modify.
+- What tools does the PM need? It mostly analyzes, but it may also need to write files (plans, backlog documents). Think about where the boundaries are -- what should it be allowed to touch and what should it not?
 - What instructions make the PM produce consistent, structured output?
 - What should a backlog item look like? (Think: title, description, acceptance criteria, TDD requirements, definition of done.)
 
@@ -48,15 +64,17 @@ A custom agent is a Markdown file with YAML frontmatter that defines the agent's
 - Switch to the PM agent and ask it to assess the project and identify improvement areas.
 - Ask it to plan a feature it identifies as a good candidate.
 - Ask it to review one of its own backlog items for completeness and proper sizing.
+- If you're unsure about any design decision, switch to the **Exercise Tutor** agent in a separate thread and ask.
 
 **Discussion points:**
 - How specific should the instructions be vs. how much should you rely on the model's judgment?
-- What [model](https://code.visualstudio.com/docs/copilot/customization/custom-agents#_header-optional) would you choose for this agent and why? Think about cost vs. capability vs. context window.
+- What model would you choose for this agent? The PM needs to reason about architecture but doesn't need to generate code. Consult the [model comparison reference](https://docs.github.com/en/copilot/reference/ai-models/model-comparison) and think about cost, capability, and context window trade-offs.
 - How would you test that the agent behaves consistently?
 
 **References:**
 - [Custom agents in VS Code](https://code.visualstudio.com/docs/copilot/customization/custom-agents)
 - [Creating custom agents (GitHub)](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-custom-agents)
+- [Model comparison](https://docs.github.com/en/copilot/reference/ai-models/model-comparison)
 
 ---
 
@@ -68,17 +86,23 @@ A custom agent is a Markdown file with YAML frontmatter that defines the agent's
 
 The difference between a skill and a custom instruction: skills include scripts, examples, and resources alongside instructions. They are loaded on-demand based on relevance, not always-on. They are portable across VS Code, Copilot CLI, and the coding agent. See [skills vs. custom instructions](https://code.visualstudio.com/docs/copilot/customization/agent-skills#_agent-skills-vs-custom-instructions).
 
+**Getting started:** Type `/skills` in the chat input to open the Configure Skills menu, where you can create a new skill. You can also describe the skill you want to Copilot and ask it to scaffold the directory and `SKILL.md` for you.
+
 **Task:** Think about what the PM agent does repeatedly, and where deterministic scripts would produce more reliable results than the LLM guessing. Discuss with your group and with Copilot. Build at least two skills.
+
+What kind of deterministic capabilities would help a PM agent? Consider things like: gathering real dependency information via the correct package manager commands, collecting project metrics (test count, source file count per layer, lint status), or mapping test files to source files to identify coverage gaps. The key idea is that these are things a shell script can do reliably and the LLM should not be guessing at.
 
 **For each skill:**
 - Create the directory structure: `.github/skills/<name>/SKILL.md` plus any scripts.
 - The `SKILL.md` must have `name` and `description` in the YAML frontmatter. The `name` must match the directory name.
+- Keep skills focused and concise -- a skill that tries to do too much loses effectiveness.
 - Write scripts that produce structured, parseable output. The agent interprets the output; the script ensures deterministic data collection.
 - Test the skill by invoking it as a slash command (`/<skill-name>`) or by prompting the PM agent in a scenario where the skill should activate.
 - Control visibility with `user-invocable` and `disable-model-invocation` frontmatter properties. See [slash command control](https://code.visualstudio.com/docs/copilot/customization/agent-skills#_use-skills-as-slash-commands).
+- To nudge the agent toward using a skill, reference it explicitly in the agent's instructions (e.g., "When assessing the project, use the `<skill-name>` skill to gather metrics").
 
 **Discussion points:**
-- What makes a good boundary between "instruction for the agent" and "script that runs deterministically"?
+- What makes a good boundary between "instruction for the agent" and "script that runs deterministically"? (Ask the **Exercise Tutor** if you want to think this through.)
 - How do you ensure the agent actually uses the skill vs. trying to do it in its own way?
 - Which of these skills would be useful beyond the PM agent?
 
@@ -94,24 +118,35 @@ This is the main exercise. You will design and implement a multi-agent workflow 
 
 ### 3a: Design the Orchestration
 
-Before writing any agent files, design the workflow as a group. Use the PM agent from Exercise 1 to identify and plan a feature to implement.
+Before writing any agent files, design the workflow as a group. Use the PM agent from Exercise 1 to identify and plan a feature to implement. The **Exercise Tutor** agent can help you think through orchestration patterns -- open a separate thread for that conversation.
 
 Subagents are independent agents that perform focused work and report results back to a main agent. Each runs in its own context window. The main agent waits for results before continuing. Multiple subagents can run in parallel. See [how subagent execution works](https://code.visualstudio.com/docs/copilot/agents/subagents#_how-subagent-execution-works).
 
-**What roles does the workflow need?** Think about separation of concerns: who researches, who writes tests, who writes production code, who documents. Consider:
+**What roles does the workflow need?** Think hard about separation of concerns. The goal is not just "who does what" but also "what does each agent receive as input and what exactly does it return." Define the input/output contract for each role explicitly.
+
+Consider:
 - Which roles are read-only vs. which need to edit files?
 - Which roles can run in parallel?
-- What does each role receive as input and what does it return?
 - The TDD cycle: someone writes failing tests first, someone else makes them pass.
+- **Where does the coordinator stop and wait for human approval?** At minimum, after research and before committing to an implementation plan.
+
+A critical design goal: **the coordinator should not read files itself.** It delegates all research (the heavy context ingestion) to researcher subagents that return concise, structured summaries. For example, a researcher given a task to find relevant code should return which files and which line ranges contain the relevant information -- not the file contents. This keeps the coordinator's context window lean and focused on decision-making.
 
 Use the [coordinator and worker pattern](https://code.visualstudio.com/docs/copilot/agents/subagents#_coordinator-and-worker-pattern) from the docs as a starting point, but adapt it to your needs.
 
 **Design questions to resolve:**
-- What information does the coordinator pass to each subagent? What does it expect back?
-- Research agents must always return concise, structured summaries -- not dump entire files. How do you enforce this in their instructions?
+- What information does the coordinator pass to each subagent? What does it expect back? Be specific about the format.
+- How do you instruct researchers to return structured, concise summaries instead of dumping file contents?
 - What happens when new code conflicts with existing tests? Define the escalation protocol.
-- Should each agent use the same model, or would cheaper/faster models work for some roles?
 - Do all roles need to be separate agents, or could some be combined?
+
+**Model selection for each role:** Not every agent needs the most expensive model. Think about what each role actually does:
+- Does it need to reason about architecture and make judgment calls? Strong reasoning model.
+- Does it need to ingest a lot of code? Needs a large context window.
+- Does it follow straightforward instructions without high abstraction? A mid-tier model works.
+- Does it just collect and format information? Cheapest/fastest model.
+
+Consult the [model comparison reference](https://docs.github.com/en/copilot/reference/ai-models/model-comparison) when choosing.
 
 ### 3b: Implement the Agents
 
@@ -123,14 +158,26 @@ Key technical details:
 - Each agent defines its own `tools` list. Read-only agents should not have edit/terminal tools.
 - Worker agents can specify a `model` -- consider cheaper/faster models for narrow tasks.
 
-The coordinator's instructions should define the workflow sequence explicitly: what it delegates first, what it does with the results, what triggers the next step, and what happens on failure.
+The coordinator's instructions should define the workflow sequence explicitly: what it delegates first, what it does with the results, what triggers the next step, where it stops for human review, and what happens on failure.
 
-### 3c: Run a Feature Through It
+### 3c: Debug and Validate
+
+Before running a full feature through the workflow, do a dry run. Give the coordinator a small, well-defined task and observe.
+
+**Debugging agent behavior:** Open the agent debug panel (right-click in the Chat view and select "Diagnostics") to understand why agents make the decisions they do. Key things to investigate:
+- Why did the coordinator choose to call (or skip) a particular subagent?
+- Did a skill get loaded? If not, why not -- was the description too vague?
+- What context did the subagent actually receive?
+
+**Practical tip:** Use separate chat threads for different concerns -- one for running the agent, one for tweaking definitions, one for asking the **Exercise Tutor** about debugging strategies. Changes to `.agent.md` files take effect in new threads, not the currently running one.
+
+### 3d: Run a Feature Through It
 
 Take the feature you planned in 3a, switch to the coordinator agent, and give it the feature spec. Observe the full workflow.
 
 **Things to watch for:**
 - Does the coordinator actually delegate, or does it try to do everything itself?
+- Does the coordinator stop at the designated human checkpoints?
 - Are the research summaries concise enough, or do they bloat the coordinator's context?
 - Does the TDD cycle work -- tests written first, then implementation?
 - Does the implementer iterate until tests pass?
@@ -162,7 +209,9 @@ Test by asking the PM to assess the project. It should delegate the research and
 
 **Goal:** Identify repeatable operations in the subagent workflow and extract them into skills.
 
-Look at the agents you built in Exercise 3. What do they do repeatedly? Where would a deterministic script produce better results than the LLM improvising? Discuss with your group and with Copilot.
+Look at the agents you built in Exercise 3. What do they do repeatedly? Where would a deterministic script produce better results than the LLM improvising?
+
+**Starting point:** If you're unsure what skills to build, open a new chat thread and ask Copilot (or the **Exercise Tutor**) to assess your current agent definitions and propose skills that would make them more reliable. Use that as a starting point, then refine. Remember that skills should be reusable across agents and deterministic -- the value is in scripts that produce reliable, structured output, not in more prose instructions.
 
 For each skill you identify, create the directory, `SKILL.md`, and any scripts. Then update the relevant agent instructions to reference the skill explicitly (e.g., "Always use the `<skill-name>` skill after modifying source files").
 
@@ -175,6 +224,8 @@ For each skill you identify, create the directory, `SKILL.md`, and any scripts. 
 **Goal:** Add lifecycle hooks that enforce guarantees the instructions alone cannot.
 
 Create `.github/hooks/` configuration files. Start with one or two hooks and observe their behavior.
+
+**Starting point:** As with skills, you can ask Copilot (or the **Exercise Tutor**) in a separate thread to review your current agent workflow and suggest where hooks would add value. Focus on places where you observed agents skipping steps or producing inconsistent results in Exercise 3.
 
 Think about the full lifecycle of an agent session and where you want guarantees that instructions alone cannot provide. The available [hook events](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-lifecycle-events) are: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SubagentStart`, `SubagentStop`, `Stop`.
 
