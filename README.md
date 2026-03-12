@@ -4,7 +4,7 @@ A medium-complexity FastAPI weather service designed as a **GitHub Copilot exerc
 
 ## Purpose
 
-This repository is **not** a product — it's a realistic codebase for practicing GitHub Copilot (chat, completions, agent mode) on real-world Python patterns. The goal is to eliminate setup time so participants can jump straight into Copilot exercises.
+This repository is a tutorial-grade Python project with basic scaffolding — a layered FastAPI app, tests, linting, and CI-friendly structure. It serves as the substrate for learning to build agentic workflows with GitHub Copilot: custom agents, skills, subagents, hooks, and MCP integration. The application code itself is not the focus — you will build tooling **around** it.
 
 ## Exercises
 
