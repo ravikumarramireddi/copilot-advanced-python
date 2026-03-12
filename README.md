@@ -159,6 +159,30 @@ tests/
 
 Interactive API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs) when the app is running.
 
+## Copilot Custom Instructions
+
+This project uses [VS Code custom instructions](https://code.visualstudio.com/docs/copilot/customization/custom-instructions) to keep AI-assisted coding aligned with the project's conventions. Instructions are layered:
+
+### Always-on: `.github/copilot-instructions.md`
+
+Automatically included in every Copilot chat request. Contains project-wide context only: architecture overview, layer responsibilities, dependency summary, and run commands. Intentionally kept high-level so it doesn't conflict with the more specific files below.
+
+### File-based: `.github/instructions/*.instructions.md`
+
+Applied conditionally based on the files being edited. Each file targets a specific part of the codebase via an `applyTo` glob pattern:
+
+| File | `applyTo` | What it covers |
+|------|-----------|----------------|
+| [`python.instructions.md`](.github/instructions/python.instructions.md) | `src/**/*.py` | Python 3.12+ syntax, formatting, naming, layer responsibilities, async patterns, error handling, Pydantic/FastAPI idioms, dependency injection |
+| [`testing.instructions.md`](.github/instructions/testing.instructions.md) | `tests/**/*.py` | pytest framework config, test organization, markers, naming convention, AAA pattern, factory usage, mocking strategy (unit vs integration), fixtures |
+| [`frontend.instructions.md`](.github/instructions/frontend.instructions.md) | `src/weather_app/static/**` | Vanilla JS conventions, CSS custom properties, HTML structure, Chart.js usage, accessibility rules |
+
+### Custom agents: `.github/agents/`
+
+| Agent | Purpose |
+|-------|---------|
+| [`teacher.agent.md`](.github/agents/teacher.agent.md) | Workshop coach — guides participants through exercises without writing code for them |
+
 ## Backlog
 
 Improvement ideas to tackle as Copilot exercises:
