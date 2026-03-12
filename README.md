@@ -8,7 +8,12 @@ This repository is **not** a product — it's a realistic codebase for practicin
 
 ## Exercises
 
-See [EXERCISES.md](EXERCISES.md) for the workshop exercises. They cover custom agents, agent skills, subagent orchestration, hooks, and MCP server integration.
+See [EXERCISES.md](EXERCISES.md) for the workshop exercises, split across two workshops:
+
+- **Workshop 1** (~2 hours): Custom agents, skills, and hooks.
+- **Workshop 2** (~1 hour): Subagent orchestration.
+
+**Optional:** For the MCP stretch exercise, browse the [GitHub MCP registry](https://github.com/mcp) and verify whether your organization's policies allow configuring external MCP servers.
 
 ## What It Does
 

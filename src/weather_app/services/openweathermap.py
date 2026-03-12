@@ -67,7 +67,7 @@ class OpenWeatherMapClient:
 
     async def get_forecast(
         self, lat: float, lon: float, days: int = 5
-    ) -> list[ForecastDay]:
+    ) -> tuple[str, list[ForecastDay]]:
         """Fetch a multi-day weather forecast for the given coordinates.
 
         The OpenWeatherMap free-tier ``/forecast`` endpoint returns data in
@@ -79,7 +79,7 @@ class OpenWeatherMapClient:
             days: Number of forecast days to return (max 5).
 
         Returns:
-            A list of ``ForecastDay`` models (one per day, up to *days*).
+            A tuple of (city_name, forecast_days).
 
         Raises:
             WeatherAPINotFoundError: If the location is not found.
@@ -90,7 +90,8 @@ class OpenWeatherMapClient:
             "/forecast",
             params={"lat": lat, "lon": lon, "units": "metric"},
         )
-        return self._parse_forecast(data, days)
+        city_name = data.get("city", {}).get("name", "Unknown")
+        return city_name, self._parse_forecast(data, days)
 
     # ------------------------------------------------------------------
     # HTTP helpers

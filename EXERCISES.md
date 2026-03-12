@@ -1,8 +1,9 @@
 # Advanced GitHub Copilot Exercises
 
-These exercises focus on building an agentic development workflow using custom agents, skills, subagents, and hooks. The weather app codebase is the substrate -- you will build tooling around it, not fix it.
+These exercises are split across two workshops. The weather app codebase is the substrate -- you will build tooling around it, not fix it.
 
-**Time estimate:** Exercises 0-3 fit in a ~2-hour workshop. Exercises 4-7 are stretch goals for continued practice.
+- **Workshop 1** (~2 hours): Learn the building blocks -- custom agents, skills, and hooks.
+- **Workshop 2** (~1 hour): Assemble them into a multi-agent orchestration workflow.
 
 **Approach:** These exercises are intentionally open-ended. Discuss design decisions with your group and use Copilot to explore options. There is no single correct solution.
 
@@ -26,6 +27,10 @@ These exercises focus on building an agentic development workflow using custom a
 
 ---
 
+# Workshop 1: Building Blocks
+
+---
+
 ## Exercise 0: Setup Verification
 
 Before starting, confirm your environment works.
@@ -38,6 +43,8 @@ uv run pytest
 All tests should pass. You do not need an OpenWeatherMap API key for the exercises -- tests mock external calls.
 
 Verify that VS Code agent mode is functional: open the Chat view, check that the agent picker shows both built-in agents (Agent, Plan, Ask, Edit) and that you can switch between them.
+
+Confirm the **Exercise Tutor** agent is available: open the agent picker and look for it in the list. Switch to it and ask a question to verify it responds. This agent is your workshop coach -- use it throughout the exercises when you need guidance on concepts, design decisions, or debugging.
 
 Create the directories you will use:
 
@@ -112,13 +119,96 @@ What kind of deterministic capabilities would help a PM agent? Consider things l
 
 ---
 
-## Exercise 3: Subagent Orchestration -- Feature Implementation Workflow
+## Exercise 3: Hooks
 
-This is the main exercise. You will design and implement a multi-agent workflow that can take a feature from plan to implementation using TDD.
+**Goal:** Add lifecycle hooks that enforce guarantees that instructions alone cannot provide.
 
-### 3a: Design the Orchestration
+**Key concept:** Hooks are shell commands that run deterministically at specific points in the agent lifecycle. An instruction that says "always run the linter" is a suggestion the LLM may ignore. A hook that runs the linter is a guarantee. See [hook lifecycle events](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-lifecycle-events).
 
-Before writing any agent files, design the workflow as a group. Use the PM agent from Exercise 1 to identify and plan a feature to implement. The **Exercise Tutor** agent can help you think through orchestration patterns -- open a separate thread for that conversation.
+Create `.github/hooks/` configuration files. Start with one or two hooks and observe their behavior.
+
+**Starting point:** Think about the PM agent and skills you built in Exercises 1-2. Where did the agent skip steps or produce inconsistent results? Ask Copilot (or the **Exercise Tutor**) in a separate thread to review your current agent definition and suggest where hooks would add value.
+
+Think about the full lifecycle of an agent session and where you want guarantees that instructions alone cannot provide. The available [hook events](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-lifecycle-events) are: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SubagentStart`, `SubagentStop`, `Stop`.
+
+Hook configuration is JSON in `.github/hooks/`. See [hook configuration format](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-configuration-format) and [hook input/output](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-input-and-output) for details on how hooks communicate with the agent.
+
+**Key points:**
+- Hooks run deterministically -- they are shell commands, not LLM suggestions.
+- A `Stop` hook that blocks must check `stop_hook_active` to prevent infinite loops.
+- [Agent-scoped hooks](https://code.visualstudio.com/docs/copilot/customization/hooks#_agent-scoped-hooks) (defined in the agent's frontmatter `hooks` field) only run when that agent is active. Requires `chat.useCustomAgentHooks` to be enabled.
+- `PreToolUse` hooks can [control tool approval](https://code.visualstudio.com/docs/copilot/customization/hooks#_pretooluse-output): allow, deny, or ask.
+
+**Things to try:**
+- A `PostToolUse` hook that runs the linter after any file edit.
+- A `PreToolUse` hook that requires confirmation before terminal commands.
+- An agent-scoped hook on the PM agent that logs every assessment to a file.
+
+**Discussion:**
+- Where is the line between "the agent should decide" and "the system must enforce"?
+- What are the risks of hooks that block agent operations?
+- How do hooks, skills, and instructions each fit into the control spectrum? (Instructions = guidance, skills = on-demand capabilities, hooks = guarantees.)
+
+**References:**
+- [Hooks in VS Code](https://code.visualstudio.com/docs/copilot/customization/hooks)
+- [Using hooks (GitHub)](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/use-hooks)
+
+---
+
+## Exercise 4: Feature Implementation with Your Tools
+
+**Goal:** Put the building blocks together. Use the PM agent to plan a feature and then implement it using Agent mode, with your skills and hooks active.
+
+This exercise is the Workshop 1 payoff. You'll experience the full cycle manually -- which will make the "why orchestrate?" question concrete when you reach Workshop 2.
+
+**Steps:**
+1. Switch to the PM agent. Ask it to assess the project and propose a feature. Observe whether your skills fire and whether the hooks behave as expected.
+2. Pick a feature from the PM's output. Ask the PM to produce a detailed plan with acceptance criteria and TDD requirements.
+3. Switch to the built-in **Agent** mode (not your PM). Give it the plan and ask it to implement the feature using TDD -- tests first, then implementation.
+4. Review the result. Run `uv run pytest` to verify.
+
+**Things to observe:**
+- Did the PM's skills activate and produce useful data, or did it ignore them?
+- Did hooks enforce the guarantees you set up? (Linting, confirmation gates, etc.)
+- How much manual coordination did you have to do between the PM step and the implementation step? (Copy-pasting plans, switching chat threads, re-explaining context...)
+- **That manual coordination is exactly what orchestration automates in Workshop 2.**
+
+**Iterate:** If skills didn't fire or hooks misbehaved, go back and fix them. Use the **Exercise Tutor** in a separate thread for debugging.
+
+---
+
+## Exercise 4S: MCP Server Integration (Stretch)
+
+**Goal:** Extend your agents with external tools via Model Context Protocol servers.
+
+MCP servers expose external tools to agents via a standardized protocol. Browse the [GitHub MCP registry](https://github.com/mcp) to see what's available.
+
+**Discussion prompts:**
+- The PM agent creates backlog items as text. What if it could create GitHub Issues directly? (The GitHub MCP server can do this.)
+- What if test results were available as a structured MCP tool with parsed output?
+- What would a "project metrics" MCP server look like -- one that exposes code complexity, test coverage, and dependency audit as tools?
+
+**If your organization's policies allow:** Configure an existing MCP server from the [GitHub MCP registry](https://github.com/mcp) in one of your agents using the `mcp-servers` property in the agent frontmatter, and try using it.
+
+---
+
+# Workshop 2: Orchestration
+
+You have the building blocks from Workshop 1: a custom agent, skills, and hooks. Now assemble them into a multi-agent workflow.
+
+**Time estimate:** Exercise 5 fits in ~1 hour. Exercises 6-7 are stretch goals.
+
+---
+
+## Exercise 5: Subagent Orchestration -- Feature Implementation Workflow
+
+This is the main exercise. You will design and implement a multi-agent workflow that can take a feature from plan to implementation using TDD. Use the PM agent from Workshop 1 to identify a feature, then build the orchestration to implement it.
+
+Remember Exercise 4? The manual coordination you did there -- switching agents, copy-pasting plans, re-explaining context -- is what orchestration automates.
+
+### 5a: Design the Orchestration
+
+Before writing any agent files, design the workflow as a group. Use the PM agent from Workshop 1 to identify and plan a feature to implement. The **Exercise Tutor** agent can help you think through orchestration patterns -- open a separate thread for that conversation.
 
 Subagents are independent agents that perform focused work and report results back to a main agent. Each runs in its own context window. The main agent waits for results before continuing. Multiple subagents can run in parallel. See [how subagent execution works](https://code.visualstudio.com/docs/copilot/agents/subagents#_how-subagent-execution-works).
 
@@ -148,7 +238,7 @@ Use the [coordinator and worker pattern](https://code.visualstudio.com/docs/copi
 
 Consult the [model comparison reference](https://docs.github.com/en/copilot/reference/ai-models/model-comparison) when choosing.
 
-### 3b: Implement the Agents
+### 5b: Implement the Agents
 
 Create the agent files in `.github/agents/` based on your design.
 
@@ -157,10 +247,11 @@ Key technical details:
 - The coordinator should restrict which subagents it can use via the [`agents` property](https://code.visualstudio.com/docs/copilot/agents/subagents#_restrict-which-subagents-can-be-used-experimental).
 - Each agent defines its own `tools` list. Read-only agents should not have edit/terminal tools.
 - Worker agents can specify a `model` -- consider cheaper/faster models for narrow tasks.
+- Wire in the skills and hooks you built in Workshop 1 where they apply.
 
 The coordinator's instructions should define the workflow sequence explicitly: what it delegates first, what it does with the results, what triggers the next step, where it stops for human review, and what happens on failure.
 
-### 3c: Debug and Validate
+### 5c: Debug and Validate
 
 Before running a full feature through the workflow, do a dry run. Give the coordinator a small, well-defined task and observe.
 
@@ -171,9 +262,9 @@ Before running a full feature through the workflow, do a dry run. Give the coord
 
 **Practical tip:** Use separate chat threads for different concerns -- one for running the agent, one for tweaking definitions, one for asking the **Exercise Tutor** about debugging strategies. Changes to `.agent.md` files take effect in new threads, not the currently running one.
 
-### 3d: Run a Feature Through It
+### 5d: Run a Feature Through It
 
-Take the feature you planned in 3a, switch to the coordinator agent, and give it the feature spec. Observe the full workflow.
+Take the feature you planned in 5a, switch to the coordinator agent, and give it the feature spec. Observe the full workflow.
 
 **Things to watch for:**
 - Does the coordinator actually delegate, or does it try to do everything itself?
@@ -190,9 +281,9 @@ Take the feature you planned in 3a, switch to the coordinator agent, and give it
 
 ---
 
-## Exercise 4: Refactor the PM Agent (Stretch)
+## Exercise 6: Refactor the PM Agent (Stretch)
 
-**Goal:** Upgrade the PM agent to use the researcher subagents from Exercise 3 instead of doing its own analysis.
+**Goal:** Upgrade the PM agent to use the researcher subagents from Exercise 5 instead of doing its own analysis.
 
 Update the PM agent:
 - Add your researcher agents to the `agents` property, and `agent` to the tools list.
@@ -205,56 +296,14 @@ Test by asking the PM to assess the project. It should delegate the research and
 
 ---
 
-## Exercise 5: Skills Across the Workflow (Stretch)
+## Exercise 7: Skills Across the Workflow (Stretch)
 
 **Goal:** Identify repeatable operations in the subagent workflow and extract them into skills.
 
-Look at the agents you built in Exercise 3. What do they do repeatedly? Where would a deterministic script produce better results than the LLM improvising?
+Look at the agents you built in Exercise 5. What do they do repeatedly? Where would a deterministic script produce better results than the LLM improvising?
 
 **Starting point:** If you're unsure what skills to build, open a new chat thread and ask Copilot (or the **Exercise Tutor**) to assess your current agent definitions and propose skills that would make them more reliable. Use that as a starting point, then refine. Remember that skills should be reusable across agents and deterministic -- the value is in scripts that produce reliable, structured output, not in more prose instructions.
 
 For each skill you identify, create the directory, `SKILL.md`, and any scripts. Then update the relevant agent instructions to reference the skill explicitly (e.g., "Always use the `<skill-name>` skill after modifying source files").
 
 **Discussion:** Skills are loaded based on relevance, not guaranteed to run. How do you increase the likelihood that agents use them? What's the difference between a skill and a hook for enforcing behavior?
-
----
-
-## Exercise 6: Hooks (Stretch)
-
-**Goal:** Add lifecycle hooks that enforce guarantees the instructions alone cannot.
-
-Create `.github/hooks/` configuration files. Start with one or two hooks and observe their behavior.
-
-**Starting point:** As with skills, you can ask Copilot (or the **Exercise Tutor**) in a separate thread to review your current agent workflow and suggest where hooks would add value. Focus on places where you observed agents skipping steps or producing inconsistent results in Exercise 3.
-
-Think about the full lifecycle of an agent session and where you want guarantees that instructions alone cannot provide. The available [hook events](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-lifecycle-events) are: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `SubagentStart`, `SubagentStop`, `Stop`.
-
-Hook configuration is JSON in `.github/hooks/`. See [hook configuration format](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-configuration-format) and [hook input/output](https://code.visualstudio.com/docs/copilot/customization/hooks#_hook-input-and-output) for details on how hooks communicate with the agent.
-
-**Key points:**
-- Hooks run deterministically -- they are shell commands, not LLM suggestions. An instruction that says "always format" is a suggestion. A hook that formats is a guarantee.
-- A `Stop` hook that blocks must check `stop_hook_active` to prevent infinite loops.
-- [Agent-scoped hooks](https://code.visualstudio.com/docs/copilot/customization/hooks#_agent-scoped-hooks) (defined in the agent's frontmatter `hooks` field) only run when that agent is active. Requires `chat.useCustomAgentHooks` to be enabled.
-- `PreToolUse` hooks can [control tool approval](https://code.visualstudio.com/docs/copilot/customization/hooks#_pretooluse-output): allow, deny, or ask.
-
-**Discussion:** Where is the line between "the agent should decide" and "the system must enforce"? What are the risks of hooks that block agent operations?
-
-**References:**
-- [Hooks in VS Code](https://code.visualstudio.com/docs/copilot/customization/hooks)
-- [Using hooks (GitHub)](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/use-hooks)
-
----
-
-## Exercise 7: MCP Server Integration (Stretch / Discussion)
-
-**Goal:** Identify where Model Context Protocol servers could extend the agents' capabilities.
-
-This exercise is primarily a design discussion. MCP servers expose external tools to agents via a standardized protocol. Think about what tools your agents lack that could be provided by an MCP server.
-
-**Discussion prompts:**
-- The PM agent creates backlog items as text. What if it could create GitHub Issues directly? (The GitHub MCP server can do this.)
-- The implementer runs tests via terminal. What if test results were available as a structured MCP tool with parsed output?
-- Could the weather API itself be exposed as an MCP tool for integration testing?
-- What would a "project metrics" MCP server look like -- one that exposes code complexity, test coverage, and dependency audit as tools?
-
-**If time permits:** Configure an existing MCP server (e.g., the GitHub MCP server) in one of your agents using the `mcp-servers` property in the agent frontmatter, and try using it.

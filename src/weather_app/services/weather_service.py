@@ -70,10 +70,12 @@ class WeatherService:
         Returns:
             A ``Forecast`` model with daily forecasts in the requested unit.
         """
-        forecast_days = await self._client.get_forecast(lat, lon, days=days)
+        city_name, forecast_days = await self._client.get_forecast(
+            lat, lon, days=days
+        )
         converted = [self._convert_forecast_day(d, units) for d in forecast_days]
         return Forecast(
-            location_name="Forecast",
+            location_name=city_name,
             units=units,
             days=converted,
         )

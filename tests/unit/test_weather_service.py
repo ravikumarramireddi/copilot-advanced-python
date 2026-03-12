@@ -105,14 +105,16 @@ class TestGetForecast:
         self, weather_service: WeatherService, mock_owm_client: AsyncMock
     ) -> None:
         """Forecast temperatures are converted to the requested unit."""
-        mock_owm_client.get_forecast.return_value = [
-            make_forecast_day(temp_min=10.0, temp_max=25.0),
-        ]
+        mock_owm_client.get_forecast.return_value = (
+            "London",
+            [make_forecast_day(temp_min=10.0, temp_max=25.0)],
+        )
 
         result = await weather_service.get_forecast(
             51.51, -0.13, days=1, units=TemperatureUnit.FAHRENHEIT
         )
 
+        assert result.location_name == "London"
         assert result.units == TemperatureUnit.FAHRENHEIT
         assert result.days[0].temp_min == 50.0
         assert result.days[0].temp_max == 77.0
@@ -121,9 +123,10 @@ class TestGetForecast:
         self, weather_service: WeatherService, mock_owm_client: AsyncMock
     ) -> None:
         """Non-temperature fields in forecast days are preserved."""
-        mock_owm_client.get_forecast.return_value = [
-            make_forecast_day(humidity=55.0, description="clear sky"),
-        ]
+        mock_owm_client.get_forecast.return_value = (
+            "London",
+            [make_forecast_day(humidity=55.0, description="clear sky")],
+        )
 
         result = await weather_service.get_forecast(51.51, -0.13, days=1)
 
@@ -134,11 +137,14 @@ class TestGetForecast:
         self, weather_service: WeatherService, mock_owm_client: AsyncMock
     ) -> None:
         """All days in a multi-day forecast are converted."""
-        mock_owm_client.get_forecast.return_value = [
-            make_forecast_day(temp_min=0.0, temp_max=10.0),
-            make_forecast_day(temp_min=5.0, temp_max=15.0),
-            make_forecast_day(temp_min=-5.0, temp_max=5.0),
-        ]
+        mock_owm_client.get_forecast.return_value = (
+            "London",
+            [
+                make_forecast_day(temp_min=0.0, temp_max=10.0),
+                make_forecast_day(temp_min=5.0, temp_max=15.0),
+                make_forecast_day(temp_min=-5.0, temp_max=5.0),
+            ],
+        )
 
         result = await weather_service.get_forecast(
             51.51, -0.13, days=3, units=TemperatureUnit.KELVIN
