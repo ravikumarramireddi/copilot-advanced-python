@@ -293,61 +293,45 @@ Remember Exercise 4? The manual coordination you did there -- switching between 
 
 ### 5a: Design the Orchestration
 
-Before writing any new agent files, design the workflow as a group. The **Exercise Tutor** agent can help you think through orchestration patterns -- open a separate thread for that conversation.
+Before writing any new agent files, design the workflow as a group. The **Exercise Tutor** can help -- open a separate thread. See [how subagent execution works](https://code.visualstudio.com/docs/copilot/agents/subagents#_how-subagent-execution-works).
 
-Subagents are independent agents that perform focused work and report results back to a main agent. Each runs in its own context window. The main agent waits for results before continuing. Multiple subagents can run in parallel. See [how subagent execution works](https://code.visualstudio.com/docs/copilot/agents/subagents#_how-subagent-execution-works).
+**What you already have** from Workshop 1: PM agent (with `create-backlog-item` skill), Implementer agent (with `run-tests` skill and post-edit linting), Smart Gatekeeper hook, PM audit hook.
 
-**Take inventory of what you already have.** From Workshop 1:
-- **PM agent** -- plans features, creates backlog items (with the `create-backlog-item` skill).
-- **Implementer agent** -- executes TDD loop, uses `run-tests` skill, has post-edit linting.
-- **Smart Gatekeeper** -- global `PreToolUse` hook protecting terminal commands.
-- **Post-edit linting** -- `PostToolUse` hook enforcing `ruff check --fix`.
-- **PM audit hook** -- agent-scoped logging on the PM.
+**What's missing:** a **Coordinator** to orchestrate the workflow, and possibly **Researcher** agents to gather codebase context.
 
-The question is not "what agents do I need?" but rather: **what's missing to connect the ones I have?** You need at minimum:
-1. A **Coordinator** that orchestrates the workflow -- it receives a feature request, delegates planning to the PM, research to researcher(s), and implementation to the Implementer.
-2. Possibly one or more **Researcher** agents that gather codebase context and return structured summaries (not file contents) so the Coordinator can make informed decisions without reading files itself.
+### Context economics -- the core "why"
 
-### Why separate agents? Context economics.
+The fundamental reason for separating agents is **context window management**. Each agent runs in its own window. A single agent that researches, reasons, *and* implements fills its context with research material, leaving little room for actual code.
 
-The fundamental reason for splitting work across agents is **context window management**. Each agent runs in its own context window. Everything an agent reads, every tool it calls, every file it opens -- it all consumes context. An agent that researches *and* reasons *and* implements will fill its context with research material, leaving little room for the actual implementation work.
+| Role | Context profile | Model needs |
+|---|---|---|
+| **Researcher** | Reads many files, produces small structured summary. Context is disposable. | Large context window; mid-tier reasoning. |
+| **Coordinator** | Sees only summaries, makes decisions. Must stay "blind" to files. | Strong reasoning; small context. |
+| **Implementer** | Receives precise instructions, writes code. No re-discovery. | Code-capable; doesn't need the most expensive model. |
 
-Separating concerns by context profile:
-- **Researchers** consume a lot of context (reading files, searching code, calling MCP tools) but produce a small, structured summary. Their context is disposable -- it's thrown away after they report back.
-- **The Coordinator** keeps a lean context: it only sees summaries and makes decisions. No file contents, no raw command output. This is why it must be "blind" -- every file it reads is context it wastes.
-- **The Implementer** receives precise instructions and focuses all its context on the code it's writing. It should not be re-discovering what to do; that research was already done by someone else.
+Consult the [model comparison reference](https://docs.github.com/en/copilot/reference/ai-models/model-comparison). The right model for the Implementer is probably *not* the same one you'd pick for the Coordinator.
 
-This also drives **model selection**:
-- Reasoning over architecture and trade-offs? Strong reasoning model (Coordinator, PM).
-- Ingesting lots of code and returning summaries? Large context window, but doesn't need top-tier reasoning (Researchers).
-- Executing clear instructions -- writing code, running tests? Capable but doesn't need the most expensive model (Implementer).
+### Design decisions
 
-Consult the [model comparison reference](https://docs.github.com/en/copilot/reference/ai-models/model-comparison) when choosing. The right model for the Implementer is probably *not* the same one you'd pick for the Coordinator.
-
-**Design questions to resolve:**
-- Every subagent must have a documented **Input/Output Contract** in its instructions. Define these now. Example for a Researcher:
+- Every subagent needs a documented **Input/Output Contract**. Example:
   ```
-  Input:  { feature_name: string, search_scope: string[] }
-  Output: { relevant_files: [{ path, line_range, summary }], architectural_notes: string }
+  Researcher — Input: { feature_name, search_scope[] }  Output: { relevant_files: [{ path, line_range, summary }], notes }
   ```
-- The PM currently produces backlog items for a human reader. What changes when the *Coordinator* consumes them instead? Does the format need to be more structured?
-- **Should the Implementer's role be split?** In Workshop 1, the Implementer does both test-writing and production code in a single TDD loop. That works well for a standalone agent, but in an orchestrated workflow you have a choice:
-  - **Keep it unified**: one agent does tests + code + run loop. Simpler, fewer agents, but the Implementer has an incentive to *change failing tests* rather than fix the code.
-  - **Split into Test Author + Implementer**: a Test Author writes failing tests from the acceptance criteria (and is *not allowed* to edit production code). A separate Implementer writes production code to make those tests pass (and is *not allowed* to edit test files). This prevents the "fix the test instead of the code" failure mode, but adds coordination complexity.
-  - This is a real design trade-off. Discuss it with your group. There is no single right answer -- it depends on how much you trust the agent to follow instructions vs. how much you want structural enforcement.
-- **Where does the Coordinator stop and wait for human approval?** At minimum, after research and before committing to an implementation plan.
-- Which agents can run in parallel? (e.g., multiple Researchers exploring different parts of the codebase.)
+- The PM produces backlog items for a human reader today. What changes when the Coordinator consumes them?
+- **Should the Implementer's role be split?** In Workshop 1 it does tests + code in one TDD loop. In an orchestrated workflow you could split it:
+  - **Unified**: simpler, but the agent may *change failing tests* instead of fixing code.
+  - **Test Author + Implementer**: the Test Author writes failing tests (can't edit `src/`), the Implementer makes them pass (can't edit `tests/`). Safer, but more coordination. `PreToolUse` hooks can enforce the file boundaries.
+  - Discuss with your group -- there's no single right answer.
+- Where does the Coordinator **stop for human approval**? At minimum, after research and before implementation.
+- Which agents can run **in parallel**?
 
 ### The "Blind" Coordinator
 
-A critical design constraint: **the Coordinator must not have the `editFiles` tool and should not read files itself.** It is strictly a "Brain" that delegates to "Hands" (worker agents). This keeps its context window lean and focused on decision-making.
+**The Coordinator must not have `editFiles` or file-reading tools.** It delegates all file operations:
+- Reading → Researcher subagents (return structured summaries, not file contents).
+- Writing → worker agents (Implementer, or Implementer + Test Author).
 
-Concretely:
-- The Coordinator's `tools` list should include `agent` (to invoke subagents) and communication tools, but **not** `editFiles`, `createFile`, or file-reading tools.
-- All file reading is delegated to Researcher subagents that return concise, structured summaries (file paths, line ranges, and a one-sentence description -- not file contents).
-- All file writing is delegated to worker agents (Implementer, or Implementer + Test Author if you split the role).
-
-Use the [coordinator and worker pattern](https://code.visualstudio.com/docs/copilot/agents/subagents#_coordinator-and-worker-pattern) from the docs as a starting point, but adapt it to your needs.
+Its `tools` list: `agent` + communication tools only. See the [coordinator and worker pattern](https://code.visualstudio.com/docs/copilot/agents/subagents#_coordinator-and-worker-pattern).
 
 ### 5b: Adapt Existing Agents and Build New Ones
 
