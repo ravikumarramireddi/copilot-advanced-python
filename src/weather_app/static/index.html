@@ -14,6 +14,13 @@
 
     <main>
         <section class="search-section">
+            <div class="city-search-bar">
+                <input type="text" id="city-input" placeholder="Search by city (e.g., London, New York)">
+                <button id="city-search-btn">Search</button>
+            </div>
+            <div id="city-search-results" class="search-results hidden">
+                <ul id="city-results-list"></ul>
+            </div>
             <div class="search-bar">
                 <input type="number" id="lat-input" placeholder="Latitude" step="any" min="-90" max="90">
                 <input type="number" id="lon-input" placeholder="Longitude" step="any" min="-180" max="180">

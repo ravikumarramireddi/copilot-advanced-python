@@ -10,9 +10,11 @@ from weather_app.models import (
     CurrentWeather,
     Forecast,
     ForecastDay,
+    LocationSearchResult,
     TemperatureUnit,
     WeatherAlert,
 )
+from weather_app.services.exceptions import InvalidSearchQueryError
 from weather_app.services.openweathermap import OpenWeatherMapClient
 from weather_app.utils.converters import celsius_to_fahrenheit, celsius_to_kelvin
 
@@ -93,6 +95,37 @@ class WeatherService:
         """
         weather = await self._client.get_current_weather(lat, lon)
         return self._evaluate_alerts(weather)
+
+    async def search_locations(
+        self, query: str, limit: int = 5
+    ) -> list[LocationSearchResult]:
+        """Search for locations by city name.
+
+        Args:
+            query: City name to search for (min 2 characters after trimming).
+            limit: Maximum number of results (default 5, clamped to 10).
+
+        Returns:
+            A list of ``LocationSearchResult`` models.
+
+        Raises:
+            InvalidSearchQueryError: If the query is too short.
+        """
+        query = query.strip()
+        if len(query) < 2:
+            raise InvalidSearchQueryError()
+        limit = min(limit, 10)
+        results = await self._client.geocode(query, limit=limit)
+        return [
+            LocationSearchResult(
+                name=r["name"],
+                country=r["country"],
+                state=r.get("state"),
+                lat=r["lat"],
+                lon=r["lon"],
+            )
+            for r in results
+        ]
 
     # ------------------------------------------------------------------
     # Temperature conversion helpers

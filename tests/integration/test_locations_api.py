@@ -10,7 +10,10 @@ import re
 import pytest
 from httpx import AsyncClient
 
-from tests.factories import make_owm_current_weather_response
+from tests.factories import (
+    make_owm_current_weather_response,
+    make_owm_geocoding_response,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -294,3 +297,110 @@ class TestGetLocationWeather:
         assert response.status_code == 200
         assert response.json()["units"] == "fahrenheit"
         assert response.json()["temperature"] == 32.0
+
+
+# ---------------------------------------------------------------------------
+# GET /api/locations/search
+# ---------------------------------------------------------------------------
+
+
+class TestSearchLocations:
+    """Integration tests for the location search endpoint."""
+
+    async def test_search_valid_query_returns_200_with_results(
+        self, client: AsyncClient, httpx_mock
+    ) -> None:
+        """A valid city name returns 200 with location results."""
+        httpx_mock.add_response(
+            url=re.compile(r".*/geo/1\.0/direct.*"),
+            json=make_owm_geocoding_response(),
+        )
+
+        response = await client.get("/api/locations/search", params={"q": "London"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["name"] == "London"
+
+    async def test_search_empty_query_returns_400(self, client: AsyncClient) -> None:
+        """An empty query parameter returns 400."""
+        response = await client.get("/api/locations/search", params={"q": ""})
+
+        assert response.status_code == 400
+
+    async def test_search_single_character_query_returns_400(
+        self, client: AsyncClient
+    ) -> None:
+        """A single-character query returns 400."""
+        response = await client.get("/api/locations/search", params={"q": "A"})
+
+        assert response.status_code == 400
+
+    async def test_search_no_results_returns_200_empty_array(
+        self, client: AsyncClient, httpx_mock
+    ) -> None:
+        """When no results are found, returns 200 with an empty array."""
+        httpx_mock.add_response(
+            url=re.compile(r".*/geo/1\.0/direct.*"),
+            json=[],
+        )
+
+        response = await client.get(
+            "/api/locations/search", params={"q": "Nonexistentcity"}
+        )
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_search_default_limit_is_five(
+        self, client: AsyncClient, httpx_mock
+    ) -> None:
+        """The default limit passes 5 to the API."""
+        httpx_mock.add_response(
+            url=re.compile(r".*/geo/1\.0/direct.*"),
+            json=make_owm_geocoding_response(),
+        )
+
+        response = await client.get("/api/locations/search", params={"q": "London"})
+
+        assert response.status_code == 200
+        request = httpx_mock.get_request()
+        assert "limit=5" in str(request.url)
+
+    async def test_search_custom_limit(self, client: AsyncClient, httpx_mock) -> None:
+        """A custom limit parameter is forwarded correctly."""
+        httpx_mock.add_response(
+            url=re.compile(r".*/geo/1\.0/direct.*"),
+            json=make_owm_geocoding_response(),
+        )
+
+        response = await client.get(
+            "/api/locations/search", params={"q": "London", "limit": 3}
+        )
+
+        assert response.status_code == 200
+        request = httpx_mock.get_request()
+        assert "limit=3" in str(request.url)
+
+    async def test_search_limit_above_10_returns_422(self, client: AsyncClient) -> None:
+        """A limit above 10 returns 422."""
+        response = await client.get(
+            "/api/locations/search", params={"q": "London", "limit": 11}
+        )
+
+        assert response.status_code == 422
+
+    async def test_search_whitespace_query_is_trimmed(
+        self, client: AsyncClient, httpx_mock
+    ) -> None:
+        """Whitespace-padded query is trimmed and works correctly."""
+        httpx_mock.add_response(
+            url=re.compile(r".*/geo/1\.0/direct.*"),
+            json=make_owm_geocoding_response(),
+        )
+
+        response = await client.get("/api/locations/search", params={"q": "  Paris  "})
+
+        assert response.status_code == 200

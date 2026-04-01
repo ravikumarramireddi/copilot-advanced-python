@@ -16,6 +16,7 @@ from weather_app.config import Settings
 from weather_app.dependencies import get_settings
 from weather_app.routers import locations, weather
 from weather_app.services.exceptions import (
+    InvalidSearchQueryError,
     WeatherAPIConnectionError,
     WeatherAPIError,
     WeatherAPINotFoundError,
@@ -79,6 +80,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 def _register_exception_handlers(app: FastAPI) -> None:
     """Register custom exception handlers on the FastAPI app."""
+
+    @app.exception_handler(InvalidSearchQueryError)
+    async def invalid_search_query_handler(
+        request: Request, exc: InvalidSearchQueryError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": exc.message},
+        )
 
     @app.exception_handler(WeatherAPINotFoundError)
     async def weather_not_found_handler(

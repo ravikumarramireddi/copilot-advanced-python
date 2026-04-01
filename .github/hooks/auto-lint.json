@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "python3 .github/hooks/auto-lint.py",
+        "timeout": 30
+      }
+    ]
+  }
+}

@@ -13,6 +13,7 @@ from weather_app.models import (
     CurrentWeather,
     Location,
     LocationCreate,
+    LocationSearchResult,
     LocationUpdate,
     TemperatureUnit,
 )
@@ -21,6 +22,16 @@ from weather_app.services.exceptions import LocationNotFoundError
 from weather_app.services.weather_service import WeatherService
 
 router = APIRouter(prefix="/api/locations", tags=["locations"])
+
+
+@router.get("/search", response_model=list[LocationSearchResult])
+async def search_locations(
+    q: Annotated[str, Query(description="City name to search for")],
+    limit: Annotated[int, Query(ge=1, le=10, description="Max results")] = 5,
+    service: WeatherService = Depends(get_weather_service),
+) -> list[LocationSearchResult]:
+    """Search for locations by city name using the geocoding API."""
+    return await service.search_locations(q, limit=limit)
 
 
 @router.get("", response_model=list[Location])

@@ -19,3 +19,9 @@ wheels/
 .idea/
 *.swp
 *.swo
+
+# Agent audit logs
+.github/pm-audit.log
+
+# vscode settings
+.vscode/

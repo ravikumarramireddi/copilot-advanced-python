@@ -103,6 +103,16 @@ class Forecast(BaseModel):
     days: list[ForecastDay] = Field(..., description="Daily forecasts")
 
 
+class LocationSearchResult(BaseModel):
+    """A location result from a geocoding search."""
+
+    name: str = Field(..., description="Location name")
+    country: str = Field(..., description="Country code")
+    state: str | None = Field(None, description="State or region, if available")
+    lat: float = Field(..., description="Latitude")
+    lon: float = Field(..., description="Longitude")
+
+
 class WeatherAlert(BaseModel):
     """A weather alert based on current conditions exceeding thresholds."""
 
