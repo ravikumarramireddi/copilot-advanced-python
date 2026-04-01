@@ -93,6 +93,49 @@ class OpenWeatherMapClient:
         city_name = data.get("city", {}).get("name", "Unknown")
         return city_name, self._parse_forecast(data, days)
 
+    async def geocode(self, query: str, *, limit: int = 5) -> list[dict]:
+        """Search for locations by city name using the Geocoding API.
+
+        Args:
+            query: City name to search for.
+            limit: Maximum number of results to return.
+
+        Returns:
+            A list of location dicts with name, country, state, lat, lon.
+
+        Raises:
+            WeatherAPINotFoundError: If the location is not found.
+            WeatherAPIError: For other API-level errors.
+            WeatherAPIConnectionError: On network failures.
+        """
+        params: dict[str, object] = {
+            "q": query,
+            "limit": limit,
+            "appid": self._api_key,
+        }
+        try:
+            response = await self._client.get("/geo/1.0/direct", params=params)
+        except httpx.ConnectError as exc:
+            raise WeatherAPIConnectionError(str(exc)) from exc
+        except httpx.TimeoutException as exc:
+            raise WeatherAPIConnectionError(
+                "Request to /geo/1.0/direct timed out"
+            ) from exc
+
+        if response.status_code == 404:
+            raise WeatherAPINotFoundError()
+        if response.status_code != 200:
+            content_type = response.headers.get("content-type", "")
+            body = (
+                response.json() if content_type.startswith("application/json") else {}
+            )
+            message = body.get("message", response.text)
+            raise WeatherAPIError(
+                status_code=response.status_code,
+                message=str(message),
+            )
+        return response.json()
+
     # ------------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------------

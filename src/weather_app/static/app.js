@@ -12,6 +12,7 @@
 let forecastChart = null;
 let currentLat = null;
 let currentLon = null;
+let citySearchDebounceTimer = null;
 
 // ---------------------------------------------------------------------------
 // DOM references
@@ -23,6 +24,10 @@ const unitsSelect = document.getElementById("units-select");
 const searchBtn = document.getElementById("search-btn");
 const saveBtn = document.getElementById("save-btn");
 const searchError = document.getElementById("search-error");
+const cityInput = document.getElementById("city-input");
+const citySearchBtn = document.getElementById("city-search-btn");
+const citySearchResults = document.getElementById("city-search-results");
+const cityResultsList = document.getElementById("city-results-list");
 const locationsList = document.getElementById("locations-list");
 const currentWeatherCard = document.getElementById("current-weather");
 const alertsSection = document.getElementById("alerts-section");
@@ -204,6 +209,90 @@ async function loadLocations() {
 }
 
 // ---------------------------------------------------------------------------
+// City search
+// ---------------------------------------------------------------------------
+
+/**
+ * Search for locations by city name via the geocoding API.
+ */
+async function searchCityName() {
+    const query = cityInput.value.trim();
+    if (query.length < 2) {
+        searchError.textContent =
+            "Please enter at least 2 characters to search.";
+        searchError.classList.remove("hidden");
+        hideCityResults();
+        return;
+    }
+
+    searchError.classList.add("hidden");
+    citySearchBtn.disabled = true;
+    citySearchBtn.textContent = "Searching…";
+
+    try {
+        const results = await apiGet(
+            `/api/locations/search?q=${encodeURIComponent(query)}`
+        );
+        showSearchResults(results);
+    } catch (err) {
+        searchError.textContent = err.message;
+        searchError.classList.remove("hidden");
+        hideCityResults();
+    } finally {
+        citySearchBtn.disabled = false;
+        citySearchBtn.textContent = "Search";
+    }
+}
+
+/**
+ * Display geocoding search results in the dropdown.
+ * @param {Array} results - Array of location objects from the API.
+ */
+function showSearchResults(results) {
+    cityResultsList.innerHTML = "";
+
+    if (results.length === 0) {
+        const li = document.createElement("li");
+        li.className = "no-results";
+        li.textContent = "No results found";
+        cityResultsList.appendChild(li);
+        citySearchResults.classList.remove("hidden");
+        return;
+    }
+
+    results.forEach((result) => {
+        const li = document.createElement("li");
+        const parts = [result.name];
+        if (result.state) parts.push(result.state);
+        parts.push(result.country);
+        li.textContent = parts.join(", ");
+        li.addEventListener("click", () => handleResultClick(result));
+        cityResultsList.appendChild(li);
+    });
+
+    citySearchResults.classList.remove("hidden");
+}
+
+/**
+ * Handle clicking on a search result: populate lat/lon and fetch weather.
+ * @param {Object} result - The selected location object.
+ */
+function handleResultClick(result) {
+    latInput.value = result.lat;
+    lonInput.value = result.lon;
+    cityInput.value = `${result.name}, ${result.country}`;
+    hideCityResults();
+    fetchWeather(result.lat, result.lon);
+}
+
+/**
+ * Hide the city search results dropdown.
+ */
+function hideCityResults() {
+    citySearchResults.classList.add("hidden");
+}
+
+// ---------------------------------------------------------------------------
 // Search & fetch
 // ---------------------------------------------------------------------------
 
@@ -267,7 +356,30 @@ saveBtn.addEventListener("click", async () => {
     }
 });
 
-// Allow Enter key to trigger search
+citySearchBtn.addEventListener("click", () => {
+    searchCityName();
+});
+
+cityInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        searchCityName();
+    }
+    if (e.key === "Escape") {
+        hideCityResults();
+    }
+});
+
+document.addEventListener("click", (e) => {
+    if (
+        !citySearchResults.contains(e.target) &&
+        e.target !== cityInput &&
+        e.target !== citySearchBtn
+    ) {
+        hideCityResults();
+    }
+});
+
+// Allow Enter key to trigger coordinate search
 [latInput, lonInput].forEach((input) => {
     input.addEventListener("keydown", (e) => {
         if (e.key === "Enter") searchBtn.click();
