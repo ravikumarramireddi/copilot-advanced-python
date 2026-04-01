@@ -198,6 +198,32 @@ def make_owm_current_weather_response(
     }
 
 
+def make_owm_geocoding_response(
+    *,
+    results: list[dict] | None = None,
+) -> list[dict]:
+    """Create a raw OpenWeatherMap geocoding API response list.
+
+    Args:
+        results: Override the full results list. Defaults to a single London
+            entry with country, state, lat, and lon.
+
+    Returns:
+        A list of location dicts matching the Geocoding API shape.
+    """
+    if results is None:
+        results = [
+            {
+                "name": "London",
+                "lat": 51.5074,
+                "lon": -0.1278,
+                "country": "GB",
+                "state": "England",
+            }
+        ]
+    return results
+
+
 def make_owm_forecast_response(
     *,
     base_temp: float = 15.0,

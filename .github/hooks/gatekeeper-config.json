@@ -1,0 +1,1 @@
+{"deny": ["^docker\\b"], "allow": ["^ls\\b"], "ask": ["\\brm\\b"]}

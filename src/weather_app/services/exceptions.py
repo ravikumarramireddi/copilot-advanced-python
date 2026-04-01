@@ -29,6 +29,17 @@ class WeatherAPINotFoundError(WeatherAPIError):
         super().__init__(status_code=404, message=message)
 
 
+class InvalidSearchQueryError(WeatherAppError):
+    """Raised when the search query is invalid (too short or empty)."""
+
+    def __init__(
+        self,
+        message: str = "Search query must be at least 2 characters",
+    ) -> None:
+        self.message = message
+        super().__init__(message)
+
+
 class LocationNotFoundError(WeatherAppError):
     """Raised when a saved location is not found in the repository."""
 

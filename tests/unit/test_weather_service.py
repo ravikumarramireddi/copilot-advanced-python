@@ -307,3 +307,93 @@ class TestGetAlerts:
 
         wind_alerts = [a for a in alerts if a.alert_type == "high_wind"]
         assert wind_alerts == []
+
+
+# ---------------------------------------------------------------------------
+# search_locations
+# ---------------------------------------------------------------------------
+
+
+class TestSearchLocations:
+    """Tests for WeatherService.search_locations()."""
+
+    async def test_successful_search_returns_location_results(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """A successful search returns a list of LocationSearchResult models."""
+        mock_owm_client.geocode.return_value = [
+            {
+                "name": "London",
+                "lat": 51.5074,
+                "lon": -0.1278,
+                "country": "GB",
+                "state": "England",
+            }
+        ]
+
+        result = await weather_service.search_locations("London")
+
+        assert len(result) == 1
+        assert result[0].name == "London"
+        assert result[0].country == "GB"
+        assert result[0].lat == 51.5074
+        assert result[0].lon == -0.1278
+        assert result[0].state == "England"
+
+    async def test_search_no_results_returns_empty_list(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """When the API returns no results, an empty list is returned."""
+        mock_owm_client.geocode.return_value = []
+
+        result = await weather_service.search_locations("Nonexistentcity")
+
+        assert result == []
+
+    async def test_empty_query_raises_invalid_search_query_error(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """An empty query string raises InvalidSearchQueryError."""
+        from weather_app.services.exceptions import InvalidSearchQueryError
+
+        with pytest.raises(InvalidSearchQueryError):
+            await weather_service.search_locations("")
+
+    async def test_single_character_query_raises_invalid_search_query_error(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """A single-character query raises InvalidSearchQueryError."""
+        from weather_app.services.exceptions import InvalidSearchQueryError
+
+        with pytest.raises(InvalidSearchQueryError):
+            await weather_service.search_locations("A")
+
+    async def test_default_limit_is_five(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """The default limit parameter is 5."""
+        mock_owm_client.geocode.return_value = []
+
+        await weather_service.search_locations("London")
+
+        mock_owm_client.geocode.assert_called_once_with("London", limit=5)
+
+    async def test_limit_enforces_maximum_of_ten(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """Limit values above 10 are clamped to 10."""
+        mock_owm_client.geocode.return_value = []
+
+        await weather_service.search_locations("London", limit=20)
+
+        mock_owm_client.geocode.assert_called_once_with("London", limit=10)
+
+    async def test_query_string_is_trimmed_of_whitespace(
+        self, weather_service: WeatherService, mock_owm_client: AsyncMock
+    ) -> None:
+        """Leading and trailing whitespace is stripped from the query."""
+        mock_owm_client.geocode.return_value = []
+
+        await weather_service.search_locations("  London  ")
+
+        mock_owm_client.geocode.assert_called_once_with("London", limit=5)
